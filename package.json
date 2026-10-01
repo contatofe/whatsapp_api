@@ -1,4 +1,7 @@
 {
   "name": "whatsapp-bot",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@vercel/functions": "^3.9.9"
+  }
 }
