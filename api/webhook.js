@@ -65,7 +65,28 @@ async function isNewMessage(wamid) {
   return rows.length > 0;
 }
 
+function detectEventType(body) {
+  const value = body.entry?.[0]?.changes?.[0]?.value;
+  if (value?.messages) return 'messages';
+  if (value?.statuses) return 'statuses';
+  return 'other';
+}
+
+async function saveEvent(body) {
+  try {
+    await sql`
+      INSERT INTO webhook_events (event_type, payload)
+      VALUES (${detectEventType(body)}, ${JSON.stringify(body)}::jsonb)
+    `;
+  } catch (err) {
+    console.error('Erro ao salvar evento:', err);
+  }
+}
+
 async function processEvent(body) {
+  
+  await saveEvent(body);
+  
   try {
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
