@@ -17,4 +17,4 @@ export default function handler(req, res) {
   }
 
   return res.status(405).end();
-}c
+}
