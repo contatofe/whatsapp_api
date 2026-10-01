@@ -1,4 +1,8 @@
 import crypto from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
+import { neon } from '@neondatabase/serverless';
+
+const sql = neon(process.env.DATABASE_URL);
 
 // ---------- GET: verificação (mesma lógica de antes, novo formato) ----------
 export function GET(request) {
@@ -32,7 +36,7 @@ function isValidSignature(rawBody, header) {
 
 // ---------- POST: eventos ----------
 export async function POST(request) {
-  const rawBody = Buffer.from(await request.arrayBuffer()); // corpo cru, byte a byte
+  const rawBody = Buffer.from(await request.arrayBuffer());
   const signature = request.headers.get('x-hub-signature-256');
 
   if (!isValidSignature(rawBody, signature)) {
@@ -41,6 +45,44 @@ export async function POST(request) {
   }
 
   const body = JSON.parse(rawBody.toString('utf8'));
-  console.log(JSON.stringify(body, null, 2));
+
+  // Agenda o processamento para depois da resposta
+  waitUntil(processEvent(body));
+
+  // Responde na hora
+  console.log('200 enviado para a Meta');
   return new Response(null, { status: 200 });
+}
+
+// Tenta gravar o ID. Retorna true se for novo, false se já existia.
+async function isNewMessage(wamid) {
+  const rows = await sql`
+    INSERT INTO processed_messages (wamid)
+    VALUES (${wamid})
+    ON CONFLICT (wamid) DO NOTHING
+    RETURNING wamid
+  `;
+  return rows.length > 0;
+}
+
+async function processEvent(body) {
+  try {
+    for (const entry of body.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        const messages = change.value?.messages ?? [];
+
+        for (const msg of messages) {
+          if (!(await isNewMessage(msg.id))) {
+            console.log('Duplicata ignorada:', msg.id);
+            continue;
+          }
+
+          console.log('Nova mensagem:', msg.id, 'tipo:', msg.type);
+          // Fase 3: decidir e enviar a resposta aqui
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao processar evento:', err);
+  }
 }
